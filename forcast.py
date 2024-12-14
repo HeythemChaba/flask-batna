@@ -3,6 +3,7 @@ import numpy as np
 from xgboost import XGBRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import RandomizedSearchCV
 
 class ForecastingModel:
     def __init__(self, df, date_col, sales_col):
@@ -31,8 +32,8 @@ class ForecastingModel:
 
     def train_model(self):
         """
-        Trains an XGBoost model to forecast daily sales.
-        :return: Trained XGBRegressor model, RMSE score, and test predictions.
+        Trains an XGBoost model using random search to find the best hyperparameters.
+        :return: Best XGBRegressor model, RMSE score, and test predictions.
         """
         # Generate lag features
         for lag in range(1, 8):  # Create lags for the past 7 days
@@ -48,9 +49,31 @@ class ForecastingModel:
         # Train-test split
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
 
-        # Train XGBoost model
-        self.model = XGBRegressor(objective='reg:squarederror', n_estimators=100, random_state=42)
-        self.model.fit(X_train, y_train)
+        # Define the parameter grid for random search
+        param_distributions = {
+            'n_estimators': [50, 100, 200, 300],
+            'max_depth': [3, 4, 5, 6, 7],
+            'learning_rate': [0.01, 0.05, 0.1, 0.2],
+            'subsample': [0.6, 0.8, 1.0]
+        }
+
+        # Initialize the base model
+        xgb = XGBRegressor(objective='reg:squarederror', random_state=42)
+
+        # Perform random search
+        random_search = RandomizedSearchCV(
+            estimator=xgb,
+            param_distributions=param_distributions,
+            n_iter=10,
+            scoring='neg_mean_squared_error',
+            cv=3,
+            random_state=42,
+            verbose=1
+        )
+        random_search.fit(X_train, y_train)
+
+        # Select the best model
+        self.model = random_search.best_estimator_
 
         # Make predictions
         y_pred = self.model.predict(X_test)
